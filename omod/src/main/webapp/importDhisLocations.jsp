@@ -6,6 +6,8 @@
 
 <form method="POST">
     <div>${message}</div>
+    <a href="${pageContext.request.contextPath}/module/dhislocation/importDhisLocations.form?currentPage=${currentPage}">Start again from current page</a>
+    <a href="${pageContext.request.contextPath}/module/dhislocation/importDhisLocations.form">Start again from beginning</a>
 </form>
 
 <%@ include file="/WEB-INF/template/footer.jsp"%>

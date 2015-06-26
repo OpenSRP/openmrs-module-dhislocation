@@ -6,6 +6,7 @@ import static org.openmrs.module.dhislocation.constant.Dhis2Constants.USERNAME_P
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -19,12 +20,16 @@ import java.util.NoSuchElementException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.openmrs.api.context.Context;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mysql.jdbc.StringUtils;
 import com.sun.org.apache.xml.internal.security.utils.Base64;
 
 public class Dhis2Utils {
 
-	public static Map<?,?> queryDhisServer(String serviceUrl, boolean appendServerUrl) throws IOException {
+	public static JsonObject queryDhisServer(String serviceUrl, boolean appendServerUrl) throws IOException {
 		String url = Context.getAdministrationService().getGlobalProperty(URL_PROPERTY)+ serviceUrl;
         String user = Context.getAdministrationService().getGlobalProperty(USERNAME_PROPERTY);
         String pwd = Context.getAdministrationService().getGlobalProperty(PASSWORD_PROPERTY);
@@ -33,30 +38,58 @@ public class Dhis2Utils {
         	throw new NoSuchElementException("Dhis server configuration should be completed before accessing the service");
         }
         
-        try{
-			HttpURLConnection conn = (HttpURLConnection) new URL(appendServerUrl?url:serviceUrl).openConnection();
-			String auth = new String(Base64.encode((user+":"+pwd).getBytes ("UTF-8")));
-	        conn.setRequestProperty ("Authorization", "Basic " + auth);
-	        
-			if (conn.getResponseCode() != 200) {
-				throw new RuntimeException("Failed : HTTP error code : " + conn.getResponseCode());
+        int maxtries = 3;
+        while(true){
+	        try{
+				HttpURLConnection conn = (HttpURLConnection) new URL(appendServerUrl?url:serviceUrl).openConnection();
+				String auth = new String(Base64.encode((user+":"+pwd).getBytes ("UTF-8")));
+		        conn.setRequestProperty ("Authorization", "Basic " + auth);
+		        conn.setRequestProperty("Content-Type", "application/json");
+		        
+				if (conn.getResponseCode() != 200) {
+					throw new RuntimeException("Failed : HTTP error code : " + conn.getResponseCode());
+				}
+				
+				BufferedReader br = new BufferedReader(new InputStreamReader((conn.getInputStream())));
+				
+				// DONOT UNCOMMENT 
+				// System.out.println(getStringFromInputStream(br));
+				return new JsonParser().parse(br).getAsJsonObject();
+	        }
+	        catch(Exception e){
+	        	if(maxtries>0){
+	        		maxtries--;
+	        		try {
+						Thread.sleep(1000*10);
+					} catch (InterruptedException e1) {
+						e1.printStackTrace();
+					}
+	        	}
+	        	else{
+	        		throw new IOException("Error connecting dhis server " + url + " : ", e);
+	        	}
+	        }
+        }
+	}
+	
+	// convert InputStream to String
+		private static String getStringFromInputStream(BufferedReader reader) throws IOException {
+			StringBuilder builder = new StringBuilder();
+			String aux = "";
+
+			while ((aux = reader.readLine()) != null) {
+			    builder.append(aux);
 			}
-			
-			BufferedReader br = new BufferedReader(new InputStreamReader((conn.getInputStream())));
-			ObjectMapper mapper = new ObjectMapper();
-		    return mapper.readValue(br, Map.class);
-        }
-        catch(Exception e){
-        	throw new IOException("Error connecting dhis server " + url + " : ", e);
-        }
+
+			return builder.toString();
+		}
+	
+	public static JsonObject getOrganisationalUnitList(Integer page) throws MalformedURLException, IOException {
+		return queryDhisServer(Dhis2Constants.ORG_UNIT_LIST_URL+".json"+(page==null?"":"?page="+page), true);
 	}
 	
-	public static Map<?, ?> getOrganisationalUnitList(Integer page) throws MalformedURLException, IOException {
-		return queryDhisServer(Dhis2Constants.ORG_UNIT_LIST_URL+(page==null?"":"?page="+page), true);
-	}
-	
-	public static Map<?, ?> getOrganisationalUnit(String url) throws MalformedURLException, IOException {
-		return queryDhisServer(url, false);
+	public static JsonObject getOrganisationalUnit(String url) throws MalformedURLException, IOException {
+		return queryDhisServer(url+".json", false);
 	}
 	
 	public static void main(String[] args) throws ParseException {

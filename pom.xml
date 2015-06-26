@@ -7,7 +7,7 @@
 	<version>0.1-SNAPSHOT</version>
 	<packaging>pom</packaging>
 	<name>DhisLocation Module</name>
-	<description>Parent project for DhisLocation Module</description>
+	<description>Module to import and sync locations with DHIS</description>
 
 	<url>http://wiki.openmrs.org/docs/DhisLocation+Module</url>
 

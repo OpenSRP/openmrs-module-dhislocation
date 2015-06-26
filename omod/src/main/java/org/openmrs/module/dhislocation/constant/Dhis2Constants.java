@@ -1,5 +1,9 @@
 package org.openmrs.module.dhislocation.constant;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
 public class Dhis2Constants {
 	public static final String PROPERTY_PREFIX = "dhislocation.";
 	public static final String URL_PROPERTY = PROPERTY_PREFIX + "server_url";
@@ -15,7 +19,9 @@ public class Dhis2Constants {
 	public static final String ORG_UNIT_PARENT_KEY = "parent";
 	public static final String ORG_UNIT_NEXT_PAGE_KEY = "nextPage";
 	public static final String ORG_UNIT_PAGE_KEY = "page";
+	public static final String ORG_UNIT_ORG_GROUP_KEY = "organisationUnitGroups";
 
+	public static final String ORG_UNIT_ORG_GROUP_TAGMAP_KEY = "name";
 
 	public static final String LOC_ATTR_DHIS_CODE_NAME = "dhis_code";
 	public static final String LOC_ATTR_DHIS_OU_ID_NAME = "dhis_ou_id";
@@ -23,4 +29,19 @@ public class Dhis2Constants {
 	
 	public static final String ORG_UNIT_LIST_URL = "/api/organisationUnits";
 
+	public static Date parseDhisDate(String date) throws ParseException{
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		date = date.replaceFirst("T", " ");
+		try{
+			return sdf.parse(date);
+		}
+		catch(ParseException e){
+			sdf.applyPattern("yyyy-MM-dd HH:mm:ss");
+			return sdf.parse(date);
+		}
+	}
+	
+    public static void main(String[] args) throws ParseException {
+		System.out.println(parseDhisDate("2011-02-23T07:53:59.000+0000"));
+	}
 }

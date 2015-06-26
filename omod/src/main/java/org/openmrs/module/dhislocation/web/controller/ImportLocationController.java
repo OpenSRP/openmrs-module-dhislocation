@@ -1,35 +1,31 @@
 package org.openmrs.module.dhislocation.web.controller;
 
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.LOC_ATTR_DHIS_CODE_NAME;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.LOC_ATTR_DHIS_OU_ID_NAME;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.LOC_ATTR_DHIS_OU_UUID_NAME;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_ACTIVE_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_CODE_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_ID_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_NAME_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_NEXT_PAGE_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_PAGE_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_PARENT_KEY;
-import static org.openmrs.module.dhislocation.constant.Dhis2Constants.ORG_UNIT_UUID_KEY;
+import static org.openmrs.module.dhislocation.constant.Dhis2Constants.*;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.servlet.http.HttpServletRequest;
+
 import org.openmrs.Location;
 import org.openmrs.LocationAttribute;
 import org.openmrs.LocationAttributeType;
+import org.openmrs.LocationTag;
 import org.openmrs.User;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.dhislocation.constant.Dhis2Utils;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.mysql.jdbc.StringUtils;
 
 @Controller
 public class ImportLocationController {
@@ -40,31 +36,30 @@ public class ImportLocationController {
 	private int rowsProcessed;
     
     @RequestMapping( value = "/module/dhislocation/importDhisLocations")
-	public void importLocations(Map model) throws MalformedURLException, IOException {
+	public void importLocations(Map model, HttpServletRequest request) throws MalformedURLException, IOException {
     	rowsProcessed = 0;
     	dhisCodeAttr = getOrCreateLocationAttributeType(LOC_ATTR_DHIS_CODE_NAME);
 		dhisidAttr = getOrCreateLocationAttributeType(LOC_ATTR_DHIS_OU_ID_NAME);
 		dhisuuidAttr = getOrCreateLocationAttributeType(LOC_ATTR_DHIS_OU_UUID_NAME);
 
+		String startP = request.getParameter("currentPage");
 		String msg = "Locations synced successfully...";
-	    Map<?, ?> rootAsMap = new HashMap();
-    	Map<String,?> pager = new HashMap();
+	    JsonObject root = null;
+	    JsonObject pager = null;
     	try{
-    		rootAsMap = Dhis2Utils.getOrganisationalUnitList(null);
-    		pager = (Map<String, ?>) rootAsMap.get("pager");
+    		root = Dhis2Utils.getOrganisationalUnitList(StringUtils.isEmptyOrWhitespaceOnly(startP)?null:Integer.parseInt(startP));
+    		pager = root.get("pager").getAsJsonObject();
     		
 			while (true){
-		    	List<?> orgUnits = (List<?>) rootAsMap.get(ORG_UNIT_KEY);
+		    	JsonArray orgUnits = root.get(ORG_UNIT_KEY).getAsJsonArray();
 	
-		    	if(orgUnits != null && orgUnits.size() > 0){
-		    		for (Object nel : orgUnits) {
-		    			createOrUpdateLocation((Map<String, ?>) nel);
-		    		}
-		    	}
+	    		for (JsonElement nel : orgUnits) {
+	    			createOrUpdateLocation(nel.getAsJsonObject());
+	    		}
 		    	
-		    	if(pager.get(ORG_UNIT_NEXT_PAGE_KEY) != null){
-		    		rootAsMap = Dhis2Utils.getOrganisationalUnitList((Integer) pager.get(ORG_UNIT_PAGE_KEY)+1);
-		    		pager = (Map<String, ?>) rootAsMap.get("pager");
+		    	if(pager.has(ORG_UNIT_NEXT_PAGE_KEY)){
+		    		root = Dhis2Utils.getOrganisationalUnitList(pager.get(ORG_UNIT_PAGE_KEY).getAsInt()+1);
+		    		pager = root.getAsJsonObject("pager");
 		    	}
 		    	else {
 		    		break;
@@ -76,7 +71,7 @@ public class ImportLocationController {
     		msg = "Error syncing locations.... "+e.getMessage();
     	}
     	
-    	if(pager.size()>0) {
+    	if(pager != null) {
 			msg += "<br><br>Details of activity are as follows <br><br>";
 			msg += "<br>Total locations :"+pager.get("total");
 			msg += "<br>Total pages :"+pager.get("pageCount");
@@ -85,13 +80,14 @@ public class ImportLocationController {
 		}
     	
 		model.put("message", msg );
+		model.put("currentPage", pager != null?pager.get("page"):null);
 	}
 
-    private Location createOrUpdateLocation(Map<?, ?> ou) throws MalformedURLException, IOException, ParseException{
+    private Location createOrUpdateLocation(JsonObject ou) throws MalformedURLException, IOException, ParseException{
     	rowsProcessed++;
     	
     	Map<LocationAttributeType, Object> attr = new HashMap<LocationAttributeType, Object>();
-		attr.put(dhisidAttr, ou.get(ORG_UNIT_ID_KEY));
+		attr.put(dhisidAttr, ou.get(ORG_UNIT_ID_KEY).getAsString());
 		
 		Location l = null;
 
@@ -108,7 +104,7 @@ public class ImportLocationController {
 		
 		for (LocationAttribute lt : l.getAttributes()) {
 			if(lt.getAttributeType().getName().equalsIgnoreCase(LOC_ATTR_DHIS_OU_ID_NAME)){
-				if(lt.getDateCreated().after(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(ou.get("lastUpdated").toString().replaceFirst("T", " ")))){
+				if(lt.getDateCreated().after(parseDhisDate((ou.get("lastUpdated").getAsString())))){
 					return l;
 				}
 			}
@@ -116,36 +112,46 @@ public class ImportLocationController {
 		
 		
 		System.out.println("OU :: "+ou);
-		Map<?, ?> oudet = Dhis2Utils.getOrganisationalUnit((String) ou.get("href"));
+		JsonObject oudet = Dhis2Utils.getOrganisationalUnit(ou.get("href").getAsString());
 
 		l.getAttributes().clear();// needed , else it would create duplicates
 		
-		Object codeval = oudet.get(ORG_UNIT_CODE_KEY);
-		LocationAttribute code = new LocationAttribute();
-		if (codeval != null) {
+		if (oudet.has(ORG_UNIT_CODE_KEY)) {
+			String codeval = oudet.get(ORG_UNIT_CODE_KEY).getAsString();
+			LocationAttribute code = new LocationAttribute();
 			code.setAttributeType(dhisCodeAttr);
-			code.setValueReferenceInternal((String) codeval);
+			code.setValueReferenceInternal(codeval);
 			
 			l.addAttribute(code);
 		}
 
-		Object uuidval = oudet.get(ORG_UNIT_UUID_KEY);
-		LocationAttribute uuid = new LocationAttribute();
-		if (uuidval != null) {
+		if (oudet.has(ORG_UNIT_UUID_KEY)) {
+			LocationAttribute uuid = new LocationAttribute();
+			String uuidval = oudet.get(ORG_UNIT_UUID_KEY).getAsString();
 			uuid.setAttributeType(dhisuuidAttr);
-			uuid.setValueReferenceInternal((String) uuidval);
+			uuid.setValueReferenceInternal(uuidval);
 			
 			l.addAttribute(uuid);
 		}
 
-		Object idval = oudet.get(ORG_UNIT_ID_KEY);
-		LocationAttribute id = new LocationAttribute();
-		if (idval != null) {
+		if (oudet.has(ORG_UNIT_ID_KEY)) {
+			String idval = oudet.get(ORG_UNIT_ID_KEY).getAsString();
+			LocationAttribute id = new LocationAttribute();
 			id.setAttributeType(dhisidAttr);
-			id.setValueReferenceInternal((String) idval);
+			id.setValueReferenceInternal(idval);
 
 			l.addAttribute(id);
 		}
+		
+		if(oudet.has(ORG_UNIT_ORG_GROUP_KEY)){
+			JsonArray orgunitgrps = oudet.getAsJsonArray(ORG_UNIT_ORG_GROUP_KEY);
+			for (JsonElement ogroup : orgunitgrps) {
+				JsonObject gp = ogroup.getAsJsonObject();
+				LocationTag tag = getOrCreateLocationTag(gp.get(ORG_UNIT_ORG_GROUP_TAGMAP_KEY).getAsString());
+				l.addTag(tag);
+			}
+		}
+		
 		/*l.setAddress1(address1);
 		l.setAddress2(address2);
 		l.setAddress3(address3);
@@ -158,9 +164,13 @@ public class ImportLocationController {
 		l.setDescription(description);*/
 		//l.setLatitude(latitude);
 		//l.setLongitude(longitude);
-		l.setName((String) oudet.get(ORG_UNIT_NAME_KEY));
+		l.setName(oudet.get(ORG_UNIT_NAME_KEY).getAsString());
 		//l.setPostalCode(postalCode);
-		l.setRetired(!(Boolean) oudet.get(ORG_UNIT_ACTIVE_KEY));
+		
+		if(oudet.has(ORG_UNIT_ACTIVE_KEY)){
+			l.setRetired(!oudet.get(ORG_UNIT_ACTIVE_KEY).getAsBoolean());
+		}
+		
 		if(l.getRetired()){
 		l.setRetireReason("Import locations activity retired locations");
 		l.setRetiredBy(new User(2));
@@ -169,17 +179,18 @@ public class ImportLocationController {
 		l.setDateChanged(new Date());
 		//l.setStateProvince(stateProvince);
 		//l.setTags(tags);
-		Map<?, ?> par = (Map<?, ?>) oudet.get(ORG_UNIT_PARENT_KEY);
-		if(par != null && par.size() > 0){
+		if(oudet.has(ORG_UNIT_PARENT_KEY)){
+			JsonObject par = oudet.getAsJsonObject(ORG_UNIT_PARENT_KEY);
+
 			Location p = getLocation(par);
 			l.setParentLocation(p == null?createOrUpdateLocation(par):p);
 		}
 		System.out.println("LOC :: "+l);
 		return Context.getLocationService().saveLocation(l);
     }
-    private Location getLocation(Map<?, ?> ou) throws MalformedURLException, IOException{
+    private Location getLocation(JsonObject ou) throws MalformedURLException, IOException{
     	Map<LocationAttributeType, Object> attr = new HashMap<LocationAttributeType, Object>();
-		attr.put(dhisidAttr, ou.get(ORG_UNIT_ID_KEY));
+		attr.put(dhisidAttr, ou.get(ORG_UNIT_ID_KEY).getAsString());
 		
 		Location l = null;
 
@@ -207,5 +218,20 @@ public class ImportLocationController {
     	lat.setCreator(new User(2));
     	lat.setDateCreated(new Date());
 		return Context.getLocationService().saveLocationAttributeType(lat );
+    }
+    
+    private LocationTag getOrCreateLocationTag(String tagName){
+    	for (LocationTag tag : Context.getLocationService().getAllLocationTags()) {
+			if(tag.getName().equalsIgnoreCase(tagName)){
+				return tag;
+			}
+		}
+
+    	LocationTag ltag = new LocationTag();
+    	ltag.setName(tagName);
+    	ltag.setDescription(tagName);
+    	ltag.setCreator(new User(2));
+    	ltag.setDateCreated(new Date());
+		return Context.getLocationService().saveLocationTag(ltag);
     }
 }
