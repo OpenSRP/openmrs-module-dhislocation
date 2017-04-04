@@ -30,6 +30,7 @@ public class Dhis2Constants {
 	public static final String ORG_UNIT_LIST_URL = "/api/organisationUnits";
 
 	public static Date parseDhisDate(String date) throws ParseException{
+		
 		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 		date = date.replaceFirst("T", " ");
 		try{

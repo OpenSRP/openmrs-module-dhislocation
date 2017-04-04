@@ -18,6 +18,7 @@ import org.openmrs.LocationAttributeType;
 import org.openmrs.LocationTag;
 import org.openmrs.User;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.dhislocation.constant.Dhis2Constants;
 import org.openmrs.module.dhislocation.constant.Dhis2Utils;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -86,8 +87,10 @@ public class ImportLocationController {
     private Location createOrUpdateLocation(JsonObject ou) throws MalformedURLException, IOException, ParseException{
     	rowsProcessed++;
     	
+    	String orgUnitId = ou.get(ORG_UNIT_ID_KEY).getAsString();
+    	
     	Map<LocationAttributeType, Object> attr = new HashMap<LocationAttributeType, Object>();
-		attr.put(dhisidAttr, ou.get(ORG_UNIT_ID_KEY).getAsString());
+		attr.put(dhisidAttr, orgUnitId);
 		
 		Location l = null;
 
@@ -98,49 +101,68 @@ public class ImportLocationController {
 		else if(loc.size() == 1){
 			l = loc.get(0);
 		}
-		else {
+		
+		System.out.println("Processing OU :: "+ou);
+		JsonObject oudet = Dhis2Utils.getOrganisationalUnit(orgUnitId);
+		
+		String locationName = oudet.get(ORG_UNIT_NAME_KEY).getAsString();
+		
+		l = Context.getLocationService().getLocation(locationName);
+		if(l == null){
 			l = new Location();
 		}
-		
+
 		for (LocationAttribute lt : l.getAttributes()) {
 			if(lt.getAttributeType().getName().equalsIgnoreCase(LOC_ATTR_DHIS_OU_ID_NAME)){
-				if(lt.getDateCreated().after(parseDhisDate((ou.get("lastUpdated").getAsString())))){
+				if(lt.getDateCreated().after(parseDhisDate((oudet.get("lastUpdated").getAsString())))){
 					return l;
 				}
 			}
 		}
-		
-		
-		System.out.println("OU :: "+ou);
-		JsonObject oudet = Dhis2Utils.getOrganisationalUnit(ou.get("href").getAsString());
-
-		l.getAttributes().clear();// needed , else it would create duplicates
-		
+				
 		if (oudet.has(ORG_UNIT_CODE_KEY)) {
 			String codeval = oudet.get(ORG_UNIT_CODE_KEY).getAsString();
-			LocationAttribute code = new LocationAttribute();
-			code.setAttributeType(dhisCodeAttr);
-			code.setValueReferenceInternal(codeval);
-			
-			l.addAttribute(code);
+			LocationAttribute code = findLocationAttribute(dhisCodeAttr.getName(), l);
+			if(code != null){
+				code.setValueReferenceInternal(codeval);				
+			}
+			else {
+				code = new LocationAttribute();
+				code.setAttributeType(dhisCodeAttr);
+				code.setValueReferenceInternal(codeval);
+
+				l.addAttribute(code);
+			}
 		}
 
 		if (oudet.has(ORG_UNIT_UUID_KEY)) {
-			LocationAttribute uuid = new LocationAttribute();
 			String uuidval = oudet.get(ORG_UNIT_UUID_KEY).getAsString();
-			uuid.setAttributeType(dhisuuidAttr);
-			uuid.setValueReferenceInternal(uuidval);
-			
-			l.addAttribute(uuid);
+			LocationAttribute uuid = findLocationAttribute(dhisuuidAttr.getName(), l);
+			if(uuid != null){
+				uuid.setValueReferenceInternal(uuidval);				
+			}
+			else {
+				uuid = new LocationAttribute();
+				uuid.setAttributeType(dhisuuidAttr);
+				uuid.setValueReferenceInternal(uuidval);
+				
+				l.addAttribute(uuid);
+			}
 		}
 
 		if (oudet.has(ORG_UNIT_ID_KEY)) {
 			String idval = oudet.get(ORG_UNIT_ID_KEY).getAsString();
-			LocationAttribute id = new LocationAttribute();
-			id.setAttributeType(dhisidAttr);
-			id.setValueReferenceInternal(idval);
-
-			l.addAttribute(id);
+			LocationAttribute id = findLocationAttribute(dhisidAttr.getName(), l);
+			if(id != null){
+				id.setValueReferenceInternal(idval);
+			}
+			else {
+				id = new LocationAttribute();
+				id.setAttributeType(dhisidAttr);
+				id.setValueReferenceInternal(idval);
+				
+				l.addAttribute(id);
+			}
 		}
 		
 		if(oudet.has(ORG_UNIT_ORG_GROUP_KEY)){
@@ -164,7 +186,7 @@ public class ImportLocationController {
 		l.setDescription(description);*/
 		//l.setLatitude(latitude);
 		//l.setLongitude(longitude);
-		l.setName(oudet.get(ORG_UNIT_NAME_KEY).getAsString());
+		l.setName(locationName);
 		//l.setPostalCode(postalCode);
 		
 		if(oudet.has(ORG_UNIT_ACTIVE_KEY)){
@@ -202,6 +224,15 @@ public class ImportLocationController {
 			l = loc.get(0);
 		}
 		return l;
+    }
+    
+    private LocationAttribute findLocationAttribute(String attributeName, Location location){
+    	for (LocationAttribute lat : location.getAttributes()) {
+			if(lat.getAttributeType().getName().equalsIgnoreCase(attributeName)){
+				return lat;
+			}
+		}
+		return null;
     }
     
     private LocationAttributeType getOrCreateLocationAttributeType(String attributeName){

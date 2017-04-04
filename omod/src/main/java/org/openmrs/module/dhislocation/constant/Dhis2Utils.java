@@ -17,6 +17,7 @@ import java.util.Calendar;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import org.apache.xerces.impl.dv.util.Base64;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.openmrs.api.context.Context;
 
@@ -25,7 +26,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mysql.jdbc.StringUtils;
-import com.sun.org.apache.xml.internal.security.utils.Base64;
 
 public class Dhis2Utils {
 
@@ -88,8 +88,8 @@ public class Dhis2Utils {
 		return queryDhisServer(Dhis2Constants.ORG_UNIT_LIST_URL+".json"+(page==null?"":"?page="+page), true);
 	}
 	
-	public static JsonObject getOrganisationalUnit(String url) throws MalformedURLException, IOException {
-		return queryDhisServer(url+".json", false);
+	public static JsonObject getOrganisationalUnit(String id) throws MalformedURLException, IOException {
+		return queryDhisServer(Dhis2Constants.ORG_UNIT_LIST_URL+"/"+id+".json", true);
 	}
 	
 	public static void main(String[] args) throws ParseException {
