@@ -169,7 +169,8 @@ public class ImportLocationController {
 			JsonArray orgunitgrps = oudet.getAsJsonArray(ORG_UNIT_ORG_GROUP_KEY);
 			for (JsonElement ogroup : orgunitgrps) {
 				JsonObject gp = ogroup.getAsJsonObject();
-				LocationTag tag = getOrCreateLocationTag(gp.get(ORG_UNIT_ORG_GROUP_TAGMAP_KEY).getAsString());
+				JsonObject fullGroup = Dhis2Utils.getOrganisationalUnitGroup(gp.get(ORG_UNIT_ORG_GROUP_ID_KEY).getAsString());
+				LocationTag tag = getOrCreateLocationTag(fullGroup.get(ORG_UNIT_ORG_GROUP_NAME_KEY).getAsString());
 				l.addTag(tag);
 			}
 		}

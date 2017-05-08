@@ -4,7 +4,7 @@
 
 	<groupId>org.openmrs.module</groupId>
 	<artifactId>dhislocation</artifactId>
-	<version>1.0.0b</version>
+	<version>1.0.1b</version>
 	<packaging>pom</packaging>
 	<name>DhisLocation Module</name>
 	<description>Module to import and sync locations with DHIS</description>

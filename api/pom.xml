@@ -4,7 +4,7 @@
 	<parent>
 		<groupId>org.openmrs.module</groupId>
 		<artifactId>dhislocation</artifactId>
-		<version>1.0.0b</version>
+		<version>1.0.1b</version>
 	</parent>
 
 	<artifactId>dhislocation-api</artifactId>

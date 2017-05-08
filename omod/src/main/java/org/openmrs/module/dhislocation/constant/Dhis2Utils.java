@@ -92,6 +92,10 @@ public class Dhis2Utils {
 		return queryDhisServer(Dhis2Constants.ORG_UNIT_LIST_URL+"/"+id+".json", true);
 	}
 	
+	public static JsonObject getOrganisationalUnitGroup(String id) throws MalformedURLException, IOException {
+		return queryDhisServer(Dhis2Constants.ORG_UNIT_GROUP_LIST_URL+"/"+id+".json", true);
+	}
+	
 	public static void main(String[] args) throws ParseException {
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(new SimpleDateFormat("yyyy-MM-dd").parse("2014-03-02T21:16:07.359+0000".replaceFirst("T", "	").substring(0,19)));
