@@ -107,7 +107,11 @@ public class ImportLocationController {
 		
 		String locationName = oudet.get(ORG_UNIT_NAME_KEY).getAsString();
 		
-		l = Context.getLocationService().getLocation(locationName);
+		if(l == null){// if no location found with an id existing in dhis find by name
+			l = Context.getLocationService().getLocation(locationName);
+		}
+		
+		// if still null create a new one
 		if(l == null){
 			l = new Location();
 		}
