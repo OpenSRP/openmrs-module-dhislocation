@@ -38,25 +38,40 @@
 	 /AOP -->
 	
 	
-	<!-- Required Privileges 
+	<!-- Required Privileges  -->
 	<privilege>
-		<name>Form Entry</name>
-		<description>Allows user to access Form Entry pages/functions</description>
+		<name>DHIS - Configure</name>
+		<description>Allows user to access server and other related DHIS configuration settings</description>
 	</privilege>
-	 /Required Privileges -->
+	<privilege>
+		<name>DHIS - Run Syncer</name>
+		<description>Allows user to manage location syncer</description>
+	</privilege>
+	 <!-- /Required Privileges -->
 
 
-	<!-- Required Global Properties 
+	<!-- Required Global Properties  -->
 	<globalProperty>
-		<property>@MODULE_ID@.someProperty</property>
+		<property>@MODULE_ID@.server_url</property>
 		<defaultValue></defaultValue>
-		<description>
-			A description of the global property goes here.  The description
-			should explain enough for administrators to understand the purpose
-			and possible values for the global property.
-		</description>
+		<description>DHIS2 server URL</description>
 	</globalProperty>
-	/Required Global Properties -->
+	<globalProperty>
+		<property>@MODULE_ID@.dhis_username</property>
+		<defaultValue></defaultValue>
+		<description>DHIS2 server login username</description>
+	</globalProperty>
+	<globalProperty>
+		<property>@MODULE_ID@.dhis_password</property>
+		<defaultValue></defaultValue>
+		<description>DHIS2 server login password</description>
+	</globalProperty>
+	<globalProperty>
+		<property>@MODULE_ID@.last_sync_pager</property>
+		<defaultValue></defaultValue>
+		<description>DONOT MODIFY: Last sync pager details</description>
+	</globalProperty>
+	<!-- /Required Global Properties -->
 	
 	<!--
 	<dwr>

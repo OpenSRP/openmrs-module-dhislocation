@@ -2,16 +2,24 @@ package org.openmrs.module.dhislocation.web.controller;
 
 import static org.openmrs.module.dhislocation.constant.Dhis2Constants.*;
 
+import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.text.ParseException;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
+import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
+import org.openmrs.GlobalProperty;
 import org.openmrs.Location;
 import org.openmrs.LocationAttribute;
 import org.openmrs.LocationAttributeType;
@@ -22,45 +30,129 @@ import org.openmrs.module.dhislocation.constant.Dhis2Constants;
 import org.openmrs.module.dhislocation.constant.Dhis2Utils;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mysql.jdbc.StringUtils;
 
 @Controller
+@RequestMapping("/module/dhislocation/importDhisLocations")
 public class ImportLocationController {
 
 	private LocationAttributeType dhisCodeAttr;
     private LocationAttributeType dhisidAttr;
     private LocationAttributeType dhisuuidAttr;
+   
 	private int rowsProcessed;
-    
-    @RequestMapping( value = "/module/dhislocation/importDhisLocations")
+	private boolean syncUnderProgress;
+	
+	@RequestMapping(value = "/log")
+	public void getFile(HttpServletResponse response) {
+	    try {
+	    	response.setContentType("text/plain");
+	    	response.setContentType("application/force-download");
+	    	response.setHeader("Content-Disposition","attachment; filename=\"" + "dhis_sync.log\"");
+	    	org.apache.commons.io.IOUtils.copy(new FileInputStream(DHIS_SYNC_LOG_PATH), response.getOutputStream());
+	    	response.flushBuffer();
+	    } catch (IOException ex) {
+	      throw new RuntimeException("IOError writing file to output stream");
+	    }
+	}
+	
+	@RequestMapping(value = "/stopSync")
+	public String stopSync() {
+		syncUnderProgress = false;
+		return "redirect:/module/dhislocation/importDhisLocations.form";
+	}
+
+    @RequestMapping(method=RequestMethod.GET)
+	public void showForm(Map model, HttpServletRequest request) {
+    	String msg = "<br><br>Details of last sync performed are as follows <br><br>";
+    	try{
+    		GlobalProperty pagerP = Context.getAdministrationService().getGlobalPropertyObject(LAST_SYNC_DETAILS_PROPERTY);
+		
+	    	if(pagerP != null && pagerP.getValue() != null && !StringUtils.isEmptyOrWhitespaceOnly(pagerP.getValue().toString())) {
+	    		JsonObject pager = new JsonParser().parse(pagerP.getPropertyValue()).getAsJsonObject();
+				msg += "<br>Total locations :"+pager.get("total");
+				msg += "<br>Total pages :"+pager.get("pageCount");
+				msg += "<br>Pages synced so far :"+pager.get("page");
+	
+				model.put("lastPage", pager != null?pager.get("page"):null);
+	    	}
+    	}
+    	catch(Exception e){
+    		e.printStackTrace();
+    		msg += "Error: "+e.getMessage();
+    	}
+    	model.put("syncUnderProgress", syncUnderProgress);
+    	model.put("message", msg );
+	}
+	
+    @RequestMapping(method=RequestMethod.POST)
 	public void importLocations(Map model, HttpServletRequest request) throws MalformedURLException, IOException {
     	rowsProcessed = 0;
+    	syncUnderProgress = true;
+    	
+    	String startP = request.getParameter("currentPage");
+    	
+    	System.out.println("Starting from page "+startP);
+    	    	
+    	if(StringUtils.isEmptyOrWhitespaceOnly(startP)){
+	    	model.put("message", "Error: A valid value for page to start sync with must be specified");
+			model.put("lastPage", 0);
+			return;
+    	}
+    	    	
     	dhisCodeAttr = getOrCreateLocationAttributeType(LOC_ATTR_DHIS_CODE_NAME);
 		dhisidAttr = getOrCreateLocationAttributeType(LOC_ATTR_DHIS_OU_ID_NAME);
 		dhisuuidAttr = getOrCreateLocationAttributeType(LOC_ATTR_DHIS_OU_UUID_NAME);
 
-		String startP = request.getParameter("currentPage");
 		String msg = "Locations synced successfully...";
 	    JsonObject root = null;
 	    JsonObject pager = null;
-    	try{
+
+	    FileWriter log = new FileWriter(DHIS_SYNC_LOG_PATH, false);
+
+	    try{
     		root = Dhis2Utils.getOrganisationalUnitList(StringUtils.isEmptyOrWhitespaceOnly(startP)?null:Integer.parseInt(startP));
     		pager = root.get("pager").getAsJsonObject();
+    	
+    		try{
+	    		Context.getAdministrationService().addGlobalProperty(LAST_SYNC_DETAILS_PROPERTY, pager.toString());;
+    		}
+    		catch(Exception e){
+    			e.printStackTrace();
+    		}
+
+    		log.write("\n"+new Date(System.currentTimeMillis())+" - PAGER INFORMATION: "+pager.toString());
     		
 			while (true){
 		    	JsonArray orgUnits = root.get(ORG_UNIT_KEY).getAsJsonArray();
 	
 	    		for (JsonElement nel : orgUnits) {
 	    			createOrUpdateLocation(nel.getAsJsonObject());
+	    			
+		    		log.write("\n"+new Date(System.currentTimeMillis())+" - PROCESSING OU: "+nel.getAsJsonObject().toString());
+	    		
+		    		if(!syncUnderProgress){
+			    		log.write("\n"+new Date(System.currentTimeMillis())+" - SYNC STOPPED IN THE MIDDLE ");
+			    		break;
+		    		}
 	    		}
 		    	
+	    		if(!syncUnderProgress){
+		    		log.write("\n"+new Date(System.currentTimeMillis())+" - SYNC STOPPED IN THE MIDDLE ");
+		    		break;
+	    		}
+	    		
 		    	if(pager.has(ORG_UNIT_NEXT_PAGE_KEY)){
 		    		root = Dhis2Utils.getOrganisationalUnitList(pager.get(ORG_UNIT_PAGE_KEY).getAsInt()+1);
 		    		pager = root.getAsJsonObject("pager");
+		    		
+		    		log.write("\n"+new Date(System.currentTimeMillis())+" - PAGER INFORMATION: "+pager.toString());
 		    	}
 		    	else {
 		    		break;
@@ -69,8 +161,14 @@ public class ImportLocationController {
     	}
     	catch(Exception e){
     		e.printStackTrace();
-    		msg = "Error syncing locations.... "+e.getMessage();
+    		msg = "Error: problem encountered while syncing locations.... "+e.getMessage();
+    		
+    		log.write( "\n"+new Date(System.currentTimeMillis())+" - Error: problem encountered while syncing locations.... "+e.toString());
     	}
+	    finally {
+			log.flush();
+			log.close();
+		}
     	
     	if(pager != null) {
 			msg += "<br><br>Details of activity are as follows <br><br>";
@@ -79,9 +177,13 @@ public class ImportLocationController {
 			msg += "<br>Pages synced so far :"+pager.get("page");
 			msg += "<br>Rows created or updated : "+rowsProcessed;
 		}
+
+    	syncUnderProgress = false;
     	
-		model.put("message", msg );
-		model.put("currentPage", pager != null?pager.get("page"):null);
+		model.put("message", msg);
+		model.put("lastPage", pager != null?pager.get("page"):null);
+		model.put("syncUnderProgress", syncUnderProgress);
+		
 	}
 
     private Location createOrUpdateLocation(JsonObject ou) throws MalformedURLException, IOException, ParseException{
@@ -115,10 +217,48 @@ public class ImportLocationController {
 		if(l == null){
 			l = new Location();
 		}
-
+		
+		// to prevent skipping location update incase only organizationalUnitGroup have been updated
+		Set<LocationTag> dTagList = new HashSet<>();
+		if(l.getTags() != null && !l.getTags().isEmpty()){
+			dTagList.addAll(l.getTags());
+		}
+		
+		if(oudet.has(ORG_UNIT_ORG_GROUP_KEY)){
+			JsonArray orgunitgrps = oudet.getAsJsonArray(ORG_UNIT_ORG_GROUP_KEY);
+			for (JsonElement ogroup : orgunitgrps) {
+				JsonObject gp = ogroup.getAsJsonObject();
+				JsonObject fullGroup = Dhis2Utils.getOrganisationalUnitGroup(gp.get(ORG_UNIT_ORG_GROUP_ID_KEY).getAsString());
+				LocationTag tag = getOrCreateLocationTag(fullGroup.get(ORG_UNIT_ORG_GROUP_NAME_KEY).getAsString());
+				l.addTag(tag);
+				dTagList.add(tag);
+			}
+		}
+		
+		boolean newLocationTagAdded = false;
+		
+		if(l.getTags().size() == dTagList.size()){			
+			for (LocationTag dTag : dTagList) {	
+				boolean found = false;
+			
+				for (LocationTag lTag : l.getTags()) {
+					if(lTag.getName().equalsIgnoreCase(dTag.getName())){
+						found = true;
+						break;
+					}
+				}
+				
+				if(!found){
+					newLocationTagAdded = true;
+					break;
+				}
+			}
+		}
+				
 		for (LocationAttribute lt : l.getAttributes()) {
 			if(lt.getAttributeType().getName().equalsIgnoreCase(LOC_ATTR_DHIS_OU_ID_NAME)){
-				if(lt.getDateCreated().after(parseDhisDate((oudet.get("lastUpdated").getAsString())))){
+				if(newLocationTagAdded == false
+						&& lt.getDateCreated().after(parseDhisDate((oudet.get("lastUpdated").getAsString())))){
 					return l;
 				}
 			}
@@ -169,16 +309,6 @@ public class ImportLocationController {
 			}
 		}
 		
-		if(oudet.has(ORG_UNIT_ORG_GROUP_KEY)){
-			JsonArray orgunitgrps = oudet.getAsJsonArray(ORG_UNIT_ORG_GROUP_KEY);
-			for (JsonElement ogroup : orgunitgrps) {
-				JsonObject gp = ogroup.getAsJsonObject();
-				JsonObject fullGroup = Dhis2Utils.getOrganisationalUnitGroup(gp.get(ORG_UNIT_ORG_GROUP_ID_KEY).getAsString());
-				LocationTag tag = getOrCreateLocationTag(fullGroup.get(ORG_UNIT_ORG_GROUP_NAME_KEY).getAsString());
-				l.addTag(tag);
-			}
-		}
-		
 		/*l.setAddress1(address1);
 		l.setAddress2(address2);
 		l.setAddress3(address3);
@@ -215,6 +345,7 @@ public class ImportLocationController {
 		System.out.println("LOC :: "+l);
 		return Context.getLocationService().saveLocation(l);
     }
+    
     private Location getLocation(JsonObject ou) throws MalformedURLException, IOException{
     	Map<LocationAttributeType, Object> attr = new HashMap<LocationAttributeType, Object>();
 		attr.put(dhisidAttr, ou.get(ORG_UNIT_ID_KEY).getAsString());

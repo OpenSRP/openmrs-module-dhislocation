@@ -9,6 +9,8 @@ public class Dhis2Constants {
 	public static final String URL_PROPERTY = PROPERTY_PREFIX + "server_url";
 	public static final String USERNAME_PROPERTY = PROPERTY_PREFIX + "dhis_username";
 	public static final String PASSWORD_PROPERTY = PROPERTY_PREFIX + "dhis_password";
+	public static final String LAST_SYNC_DETAILS_PROPERTY = PROPERTY_PREFIX + "last_sync_pager";
+	public static final String DHIS_SYNC_LOG_PATH = System.getProperty("user.home")+"/dhis_sync.txt";
 	
 	public static final String ORG_UNIT_KEY = "organisationUnits";
 	public static final String ORG_UNIT_ID_KEY = "id";
